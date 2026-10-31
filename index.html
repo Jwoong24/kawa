@@ -216,7 +216,7 @@ const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa77, .9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, .65); sun.position.set(10, 22, 12); scene.add(sun);
 function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
-const SPC = () => camera.aspect < 1 ? 3.7 : 4.6; // 선택 화면 캐릭터 간격(세로 화면은 좁게)
+const SPC = () => camera.aspect < 1 ? 3.1 : 4.6; // 선택 화면 캐릭터 간격(세로 화면은 좁게)
 
 /* ================= 모델 도우미 ================= */
 const SG = new THREE.SphereGeometry(1, 18, 14), CG = new THREE.CylinderGeometry(1, 1, 1, 16), CONEG = new THREE.ConeGeometry(1, 1, 12);
@@ -284,7 +284,7 @@ function buildBunny(body, H) {
   body.add(mk(SG, skin, .68, .52, .6, 0, .58, 0));
   body.add(mk(SG, skin, HX, HY, HZ, 0, HC, 0));
   body.add(mk(SG, light, .4, .34, .2, 0, .52, .5, false));
-  for (const s of [-1, 1]) body.add(sph(.2, skin, s * .36, .16, .38, .8, 1.2));
+  body.userData.feet = []; for (const s of [-1, 1]) { const f = sph(.2, skin, s * .36, .16, .38, .8, 1.2); body.add(f); body.userData.feet.push(f); }
   body.add(sph(.17, skin, .7, .72, .45));
   body.add(sph(.15, light, 0, .5, -.58));
 
@@ -294,7 +294,7 @@ function buildBunny(body, H) {
     ear.add(mk(CG, skin, .15, .7, .13, 0, .35, 0));
     ear.add(sph(.15, skin, 0, .7, 0, 1, .87));
     const inner = new THREE.Mesh(SG, INNER_EAR); inner.scale.set(.055, .34, .04); inner.position.set(s * .085, .38, .1); ear.add(inner);
-    body.add(ear);
+    body.add(ear); (body.userData.ears = body.userData.ears || []).push(ear);
   }
 
   // 눈썹: 위쪽으로 크게 휘어진 호
@@ -334,7 +334,7 @@ function buildKawaii(body, H, kind) {
 
   body.add(mk(SG, W, .66, .55, .58, 0, .58, 0));
   body.add(mk(SG, W, HX, HY, HZ, 0, HC, 0));
-  for (const s of [-1, 1]) body.add(sph(.2, W, s * .34, .16, .36, .8, 1.2));
+  body.userData.feet = []; for (const s of [-1, 1]) { const f = sph(.2, W, s * .34, .16, .36, .8, 1.2); body.add(f); body.userData.feet.push(f); }
   const arm = mk(SG, W, .14, .26, .14, .68, .72, .12); arm.rotation.z = -.35; body.add(arm);
   if (cat) {
     const tail = mk(SG, blue, .15, .3, .15, .3, .5, -.62); tail.rotation.z = -.7; body.add(tail);
@@ -393,12 +393,13 @@ function buildHero(id) {
   const PV = { yellow: [-.7, .72, .45, .18], blue: [-.68, .74, .38, .17], pink: [-.68, .74, .38, .17] }[id] || [-.88, .95, .2, .22];
   const pivot = new THREE.Group(); pivot.position.set(PV[0], PV[1], PV[2]); pivot.userData.by = PV[1]; g.add(pivot);
   pivot.add(sph(PV[3], id === 'blue' || id === 'pink' ? 0xFFFFFF : H.color, 0, 0, 0));
-  const weapon = buildWeapon(id, H); weapon.rotation.x = Math.PI / 2; pivot.add(weapon);
+  const fix = new THREE.Group(); pivot.add(fix); // 바닥 보정용 (pivot 회전은 건드리지 않음)
+  const weapon = buildWeapon(id, H); weapon.rotation.x = Math.PI / 2; fix.add(weapon);
   g.add(shadow(1.0));
   const mkArc = (w) => { const m = new THREE.Mesh(new THREE.RingGeometry(.4, 1, 32, 1, -Math.PI / 2 - w / 2, w), new THREE.MeshBasicMaterial({ color: H.color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.y = .5; g.add(m); return m; };
   const arc = mkArc(2.2), arcW = mkArc(4.6);
   scene.add(g);
-  return { id, H, g, body, pivot, weapon, arc, arcW, arcT: 0, mats: collectMats(g) };
+  return { id, H, g, body, pivot, fix, weapon, wlen: id === 'yellow' ? 1.7 : 2.5, feet: body.userData.feet || [], ears: body.userData.ears || [], mv: 0, ph: 0, landT: 0, jt: 0, air: 0, py: 0, arc, arcW, arcT: 0, mats: collectMats(g) };
 }
 
 /* ---- 몬스터 ---- */
@@ -651,8 +652,8 @@ function hutHit(d) {
 }
 function swingPose(o, step, k) {
   const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, pv = o.pivot;
-  if (step === 0) { pv.rotation.set(.25, -1.8 + 3.6 * e, 0); o.body.rotation.y = (.5 - e) * .7; }
-  else if (step === 1) { pv.rotation.set(.25, 1.8 - 3.6 * e, 0); o.body.rotation.y = (e - .5) * .7; }
+  if (step === 0) { pv.rotation.set(-.15, -1.8 + 3.6 * e, 0); o.body.rotation.y = (.5 - e) * .7; }
+  else if (step === 1) { pv.rotation.set(-.15, 1.8 - 3.6 * e, 0); o.body.rotation.y = (e - .5) * .7; }
   else { pv.rotation.set(-2.4 + 2.9 * e, 0, 0); o.body.rotation.y = 0; }
 }
 function startSwing() {
@@ -710,6 +711,7 @@ function useQ() {
   }
 }
 function landJump() {
+  p.obj.landT = .24;
   const H = p.H; ring(p.x, p.z, H.color, 5.2, .5); ring(p.x, p.z, 0xffffff, 3.5, .4); burst(p.x, .5, p.z, H.color, 26, 9); burst(p.x, .5, p.z, 0xffffff, 12, 7);
   aoe(p.x, p.z, 4.8, H.dmg * p.dmgMul * 2.8, { stun: .9, kb: 11 }); shake(.5); SFX.boom(); p.gauge = Math.min(100, p.gauge + 6);
 }
@@ -820,15 +822,20 @@ function updatePlayer(dt) {
     if (a.t > a.dur || state !== 'play') removeAura();
   }
   if (!p.sw && !p.skill) {
-    const k = 1 - Math.exp(-12 * dt), idle = 0.9 + Math.sin(tAll * 3) * .05;
+    const k = 1 - Math.exp(-12 * dt), idle = -.5 + Math.sin(tAll * 3) * .04 + Math.sin(o.ph) * .1 * o.mv;
     o.pivot.rotation.x += (idle - o.pivot.rotation.x) * k; o.pivot.rotation.y += (-.2 - o.pivot.rotation.y) * k; o.pivot.rotation.z += (0 - o.pivot.rotation.z) * k; o.body.rotation.y *= (1 - k);
   }
   if (o.arcT > 0) { o.arcT -= dt; if (o.arcCur) o.arcCur.material.opacity = Math.max(0, o.arcT / .3 * .85); }
   o.g.position.set(p.x, 0, p.z);
   if (state !== 'over') {
-    o.g.rotation.y = p.face; const moving = il > 0 || p.sw;
-    o.body.position.y = (p.skill && p.skill.type === 'jump') ? Math.sin(Math.min(1, p.skill.t / p.skill.dur) * Math.PI) * 3.2 : (moving ? Math.abs(Math.sin(tAll * 12)) * .22 : 0); const bob = Math.sin(tAll * 4) * .03;
-    o.body.scale.set(1 - bob, 1 + bob, 1 - bob);
+    o.g.rotation.y = p.face;
+    const jm = p.skill && p.skill.type === 'jump', dsh = p.skill && p.skill.type === 'dash';
+    const swK = p.sw ? Math.min(1, p.sw.t / p.sw.dur) : 0;
+    animateHero(o, dt, {
+      mv: (jm || dsh) ? 0 : (p.sw ? .25 : clamp(Math.hypot(mvx, mvz) / H.speed, 0, 1)),
+      jump: jm ? Math.min(1, p.skill.t / p.skill.dur) : -1,
+      lean: p.sw ? .22 * Math.sin(swK * Math.PI) : (dsh ? .35 : 0)
+    });
   }
   setFlash(o.mats, p.hurtT > 0 ? .7 : (p.invuln > 0 && Math.floor(tAll * 20) % 2 ? .25 : 0));
 }
@@ -995,16 +1002,63 @@ function updateEffects(dt) {
   for (let i = particles.length - 1; i >= 0; i--) { const q = particles[i]; q.life -= dt; q.vy -= 18 * dt; q.m.position.x += q.vx * dt; q.m.position.y = Math.max(.05, q.m.position.y + q.vy * dt); q.m.position.z += q.vz * dt; q.m.scale.setScalar(Math.max(.01, q.life / q.max)); if (q.life <= 0) { scene.remove(q.m); particles.splice(i, 1); } }
   if (hutShake > 0) { hutShake -= dt; hutObj.g.position.x = (Math.random() - .5) * .25 * (hutShake / .25); } else hutObj.g.position.x = 0;
 }
+/* ---- 자연스러운 이동/점프 모션 + 지팡이 바닥 보정 ---- */
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion();
+const ez = k => k * k * (3 - 2 * k);
+function animateHero(o, dt, a) {
+  o.mv += (a.mv - o.mv) * (1 - Math.exp(-10 * dt));           // 속도를 부드럽게 따라가서 출발/정지가 뚝 끊기지 않음
+  const mv = o.mv; o.ph += dt * 14 * mv;                      // 걸음 위상: 속도에 비례해서만 진행
+  const hopk = Math.abs(Math.sin(o.ph)), contact = Math.pow(1 - hopk, 3);
+  let y = hopk * .24 * mv, sy = 1 + .04 * mv * hopk - .09 * mv * contact, rx = .13 * mv + (a.lean || 0), rz = Math.sin(o.ph) * .06 * mv;
+  if (a.pose) { y = a.pose.y; sy = a.pose.sy; rx = a.pose.rx; rz = 0; }
+  else if (a.jump >= 0) { const s = Math.sin(Math.min(1, a.jump) * Math.PI); y = s * 3.2; sy = 1 + .22 * s; rx = -Math.cos(Math.min(1, a.jump) * Math.PI) * .22; rz = 0; }
+  if (o.landT > 0) { o.landT -= dt; sy -= .26 * Math.max(0, o.landT) / .24; }  // 착지 찌그러짐
+  sy += Math.sin(tAll * 2.4 + o.id.length) * .022 * (1 - mv);                    // 숨쉬기
+  const sxz = 1 / Math.sqrt(Math.max(.5, sy));
+  o.body.position.y = y; o.body.scale.set(sxz, sy, sxz); o.body.rotation.x = rx; o.body.rotation.z = rz;
+  const inAir = (a.jump >= 0 || y > .1) && mv < .3 ? 1 : 0; o.air += (inAir - o.air) * (1 - Math.exp(-14 * dt));
+  o.feet.forEach((f, i) => {                                   // 발 교차 + 공중에서는 모으기
+    if (!f.userData.b) f.userData.b = f.position.clone(); const b = f.userData.b, ang = o.ph + (i ? Math.PI : 0);
+    f.position.z = b.z + Math.sin(ang) * .3 * mv + o.air * .22; f.position.y = b.y + Math.max(0, Math.cos(ang)) * .2 * mv + o.air * .16;
+  });
+  const vy = (y - o.py) / Math.max(dt, .001); o.py = y;
+  o.ears.forEach((e, i) => {                                   // 귀가 한 박자 늦게 따라옴
+    e.rotation.x = -.2 * mv + Math.sin(o.ph * 2 + i * .6) * .06 * mv - clamp(vy * .03, -.3, .3);
+  });
+}
+function clampWeapon(o) {                                      // 지팡이 끝이 바닥 아래로 내려가지 않게 방향을 들어올림
+  o.fix.quaternion.identity();
+  const pv = o.pivot, minY = .18 / (o.g.scale.x || 1);
+  _v.set(0, 0, 1).applyQuaternion(pv.quaternion);
+  let need = (minY - pv.position.y) / o.wlen; if (need > .95) need = .95;
+  if (_v.y >= need) return;
+  const h = Math.hypot(_v.x, _v.z), r = Math.sqrt(1 - need * need);
+  if (h < 1e-4) _v2.set(0, need, r); else _v2.set(_v.x / h * r, need, _v.z / h * r);
+  _q.setFromUnitVectors(_v, _v2);
+  o.fix.quaternion.copy(pv.quaternion).invert().multiply(_q).multiply(pv.quaternion);
+}
 function updateSelect(dt) {
+  const T = 1.15;
   ids.forEach((id, i) => {
     const o = heroObjs[id], sel = i === selIdx; o.g.position.x += ((i - 1) * SPC() - o.g.position.x) * .2;
-    o.body.position.y = sel ? Math.abs(Math.sin(tAll * 4)) * .9 : 0; const sc = sel ? 1.3 : 1; o.g.scale.setScalar(o.g.scale.x + (sc - o.g.scale.x) * .15);
-    o.g.rotation.y = sel ? Math.sin(tAll * 2) * .45 : 0; o.pivot.rotation.set(.9 + Math.sin(tAll * 3 + i) * .15, -.2, 0);
+    const sc = sel ? 1.3 : 1; o.g.scale.setScalar(o.g.scale.x + (sc - o.g.scale.x) * .15);
+    o.g.rotation.y += ((sel ? Math.sin(tAll * 2) * .35 : Math.sin(tAll * 1.2 + i * 2) * .12) - o.g.rotation.y) * .12;
+    // 점프 한 번 = 웅크리기 → 도약(늘어남) → 착지(찌그러짐) → 회복
+    if (sel || o.jt > 0) { o.jt += dt; if (o.jt >= T) o.jt = sel ? o.jt - T : 0; }
+    let pose = null;
+    if (o.jt > 0) {
+      const u = o.jt / T;
+      if (u < .18) { const c = ez(u / .18); pose = { y: 0, sy: 1 - .18 * c, rx: .1 * c }; }
+      else if (u < .8) { const k = (u - .18) / .62; pose = { y: 4 * 1.0 * k * (1 - k), sy: 1 + .15 * Math.sin(k * Math.PI), rx: -Math.cos(k * Math.PI) * .12 }; }
+      else { const l = (u - .8) / .2; pose = { y: 0, sy: 1 - .2 * Math.sin(l * Math.PI), rx: 0 }; }
+    }
+    animateHero(o, dt, { mv: 0, jump: -1, pose });
+    o.pivot.rotation.set(-.55 - .55 * o.air + Math.sin(tAll * 3 + i) * .05, -.2, 0);
   });
 }
 function updateCamera(dt) {
   let tp, tl; const asp = camera.aspect;
-  const f = state === 'select' ? Math.min(1.8, Math.max(1, (SPC() + 2.3) / (.466 * asp * 21))) : Math.min(2.2, Math.max(1, 1.25 / asp)); // 세로 화면이면 카메라를 뒤로
+  const f = state === 'select' ? Math.min(3.2, Math.max(1, (((SPC() + 2.6) / (.466 * asp)) + 7) / 21)) : Math.min(2.2, Math.max(1, 1.25 / asp)); // 세로 화면이면 카메라를 뒤로
   scene.fog.near = 45 * f; scene.fog.far = 100 * f;
   if (state === 'select') { tp = new THREE.Vector3(0, 6.5 * f, 21 * f); tl = new THREE.Vector3(0, 2.6, 3); }
   else { const px = p ? p.x * .8 : 0, pz = p ? p.z * .8 : 0; tp = new THREE.Vector3(px, 19 * f, pz + 15 * f); tl = new THREE.Vector3(px, 0, pz - 1.5); }
@@ -1037,7 +1091,7 @@ let last = performance.now();
 function loop(now) {
   requestAnimationFrame(loop); const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (!paused) { tAll += dt; update(dt); }
-  for (const id of ids) { const o = heroObjs[id]; o.pivot.position.y = o.pivot.userData.by + o.body.position.y; } // 손이 몸과 함께 움직이도록
+  for (const id of ids) { const o = heroObjs[id]; o.pivot.position.y = o.pivot.userData.by * o.body.scale.y + o.body.position.y; if (o.g.visible && state !== 'over') clampWeapon(o); } // 손이 몸과 함께 움직이고, 지팡이는 땅에 안 묻힘
   touchEl.classList.toggle('hidden', !(isTouch && (state === 'play' || state === 'intro' || state === 'clear') && !paused));
   renderer.render(scene, camera);
 }
@@ -1126,4 +1180,4 @@ refreshSel(); startSelectScene(); requestAnimationFrame(loop);
 })();
 </script>
 </body>
-</html>
+</h
